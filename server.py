@@ -1,11 +1,14 @@
 import socket
 import threading
+import time
 
-HOST = '0.0.0.0'   # allows multiple devices
+HOST = '0.0.0.0'
 PORT = 5000
 
-seats = [0, 0, 0, 0, 0]   # 5 seats (0 = free, 1 = booked)
+seats = [0, 0, 0, 0, 0]
 lock = threading.Lock()
+
+MAX_CLIENTS = 5   # optimization: limit clients
 
 def handle_client(conn, addr):
     print(f"[CONNECTED] {addr}")
@@ -17,7 +20,9 @@ def handle_client(conn, addr):
             if not data:
                 break
 
+            start_time = time.time()   # performance start
             print(f"{addr} -> {data}")
+
             command = data.split()
 
             # VIEW seats
@@ -33,7 +38,6 @@ def handle_client(conn, addr):
                         conn.send("INVALID seat number".encode())
                         continue
 
-                    # critical section (concurrency control)
                     with lock:
                         if seats[seat] == 0:
                             seats[seat] = 1
@@ -70,6 +74,10 @@ def handle_client(conn, addr):
             else:
                 conn.send("UNKNOWN COMMAND".encode())
 
+            # performance end
+            end_time = time.time()
+            print(f"[PERFORMANCE] Response time: {end_time - start_time:.6f} sec")
+
         except:
             break
 
@@ -86,6 +94,13 @@ print("🚀 Reservation Server Started...")
 
 while True:
     conn, addr = server.accept()
+
+    # optimization: limit clients
+    if threading.active_count() - 1 >= MAX_CLIENTS:
+        conn.send("Server busy, try later".encode())
+        conn.close()
+        continue
+
     thread = threading.Thread(target=handle_client, args=(conn, addr))
     thread.start()
 
